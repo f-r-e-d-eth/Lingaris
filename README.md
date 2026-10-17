@@ -9,7 +9,7 @@ Turn an EPUB into a bilingual language-learning EPUB: translated text first, ori
 - EPUB input and EPUB output, retaining embedded pictures, chapter files, stylesheets, and navigation
 - Configurable source and translation languages and their display order
 - Short reading units based on sentence boundaries and (for long sentences) commas/semicolons
-- Google Translate via `deep-translator`, with retries and a pause between requests
+- Google Translate via `deep-translator`, with retries, request throttling and exponential cooldown for rate-limit errors
 - SQLite cache to resume after an interrupted conversion without retranslating successful segments
 - Original text printed smaller and grey via EPUB CSS
 - No DRM removal; use EPUB files you have permission to process
@@ -46,7 +46,7 @@ Change language order to show the original first:
 python lingaris.py book.epub --original-first
 ```
 
-See `python lingaris.py --help` for settings.
+To slow down requests, or increase rate-limit cooldowns:\n\n```bash\npython lingaris.py book.epub --request-interval 3 --rate-limit-cooldown 60\n```\n\nDefaults are 1.5 seconds between requests and a 30/60-second cooldown for rate-limit retries. Successful sentences are cached, so restarting does not translate them again. Throttling does not guarantee Google will accept every request.\n\nSee `python lingaris.py --help` for settings.
 
 ## Limitations (initial release)
 
