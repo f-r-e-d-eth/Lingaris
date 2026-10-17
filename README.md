@@ -1,4 +1,6 @@
-# Lingaris
+# Lingaris — V1.0
+
+First Kindle-tested bilingual EPUB release (2026-10-17): 6,789 new translations, 152 cached, zero failures on *Models of the Mind*.
 
 Turn an EPUB into a bilingual language-learning EPUB: translated text first, original text underneath, one reading unit at a time.
 
@@ -11,7 +13,7 @@ Turn an EPUB into a bilingual language-learning EPUB: translated text first, ori
 - Short reading units based on sentence boundaries and (for long sentences) commas/semicolons
 - Google Translate via `deep-translator`, with retries, request throttling and exponential cooldown for rate-limit errors
 - SQLite cache to resume after an interrupted conversion without retranslating successful segments
-- Original text printed smaller and grey via EPUB CSS
+- Original text printed smaller and darker grey (#555) via EPUB CSS
 - No DRM removal; use EPUB files you have permission to process
 
 ## Installation
@@ -46,7 +48,7 @@ Change language order to show the original first:
 python lingaris.py book.epub --original-first
 ```
 
-To slow down requests, or increase rate-limit cooldowns:\n\n```bash\npython lingaris.py book.epub --request-interval 3 --rate-limit-cooldown 60\n```\n\nDefaults are 1.5 seconds between requests and a 30/60-second cooldown for rate-limit retries. The console displays each original sentence and translation (including cache hits) with running counters. After persistent rate limiting, Lingaris stops rather than creating an apparently finished but largely untranslated EPUB. Successful sentences are cached, so restarting does not translate them again. Throttling does not guarantee Google will accept every request.\n\n### Try offline translation with Argos
+To slow down requests, or increase rate-limit cooldowns:\n\n```bash\npython lingaris.py book.epub --request-interval 3 --rate-limit-cooldown 60\n```\n\nGoogle defaults to 1.5 seconds between requests; local Argos defaults to zero extra delay. Google uses a 30/60-second cooldown for rate-limit retries. The console displays each original sentence and translation (including cache hits) with running counters. After persistent rate limiting, Lingaris stops rather than creating an apparently finished but largely untranslated EPUB. Successful sentences are cached, so restarting does not translate them again. Throttling does not guarantee Google will accept every request.\n\n### Try offline translation with Argos
 
 Install the optional package once:
 
@@ -70,7 +72,7 @@ Google remains the default engine. Google and Argos cache entries are kept separ
 
 See `python lingaris.py --help` for settings.
 
-## Limitations (initial release)
+## Known limitations
 
 - Processes paragraph/list text in XHTML chapters. Headings and navigation labels stay in the original language.
 - Images, EPUB resource files and navigation are copied unchanged. Paragraphs that contain images, links, or complex embedded block elements are left untouched to avoid damaging them.
