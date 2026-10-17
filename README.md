@@ -46,7 +46,7 @@ Change language order to show the original first:
 python lingaris.py book.epub --original-first
 ```
 
-To slow down requests, or increase rate-limit cooldowns:\n\n```bash\npython lingaris.py book.epub --request-interval 3 --rate-limit-cooldown 60\n```\n\nDefaults are 1.5 seconds between requests and a 30/60-second cooldown for rate-limit retries. Successful sentences are cached, so restarting does not translate them again. Throttling does not guarantee Google will accept every request.\n\nSee `python lingaris.py --help` for settings.
+To slow down requests, or increase rate-limit cooldowns:\n\n```bash\npython lingaris.py book.epub --request-interval 3 --rate-limit-cooldown 60\n```\n\nDefaults are 1.5 seconds between requests and a 30/60-second cooldown for rate-limit retries. The console displays each original sentence and translation (including cache hits) with running counters. After persistent rate limiting, Lingaris stops rather than creating an apparently finished but largely untranslated EPUB. Successful sentences are cached, so restarting does not translate them again. Throttling does not guarantee Google will accept every request.\n\nSee `python lingaris.py --help` for settings.
 
 ## Limitations (initial release)
 
