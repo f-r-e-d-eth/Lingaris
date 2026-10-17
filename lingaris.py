@@ -15,7 +15,7 @@ from deep_translator import GoogleTranslator
 STYLE = """
 .lingaris-pair { display: block; margin-bottom: .65em; }
 .lingaris-translation { display: block; }
-.lingaris-original { display: block; font-size: .88em; color: #777; }
+.lingaris-original { display: block; font-size: .88em; color: #555; }
 """
 
 
@@ -81,7 +81,7 @@ def prepare_argos(source, target, install=False):
 
 
 class Translator:
-    def __init__(self, source, target, cache, retries=3, delay=1, interval=1.5, cooldown=30, engine='google', install_argos_model=False):
+    def __init__(self, source, target, cache, retries=3, delay=1, interval=None, cooldown=30, engine='google', install_argos_model=False):
         self.source, self.target = source, target
         self.engine = engine
         self.cache_source = f'{engine}:{source}'
@@ -90,7 +90,8 @@ class Translator:
         self.db = sqlite3.connect(cache)
         self.db.execute('CREATE TABLE IF NOT EXISTS translations (source TEXT, target TEXT, original TEXT, translated TEXT, PRIMARY KEY(source,target,original))')
         self.retries, self.delay = retries, delay
-        self.interval, self.cooldown = interval, cooldown
+        self.interval = (0.0 if engine == 'argos' and interval is None else 1.5 if interval is None else interval)
+        self.cooldown = cooldown
         self.last_request = None
         self.new, self.hits, self.failed = 0, 0, 0
 
@@ -99,7 +100,7 @@ class Translator:
         if row:
             self.hits += 1
             print(f'[{self.new} new / {self.hits} cached] {self.source.upper()}: {text}', flush=True)
-            print(f'  {self.target.upper()} (cached): {row[0]}\\n', flush=True)
+            print(f'  {self.target.upper()} (cached): {row[0]}\n', flush=True)
             return row[0]
         print(f'[{self.new} new / {self.hits} cached] {self.source.upper()}: {text}', flush=True)
         rate_limited = False
@@ -116,7 +117,7 @@ class Translator:
                 with self.db:
                     self.db.execute('INSERT OR REPLACE INTO translations VALUES (?,?,?,?)', (self.cache_source, self.target, text, result))
                 self.new += 1
-                print(f'  {self.target.upper()}: {result}\\n', flush=True)
+                print(f'  {self.target.upper()}: {result}\n', flush=True)
                 return result
             except Exception as e:
                 print(f'Translation attempt {attempt+1}/{self.retries} failed: {e}', flush=True)
@@ -129,7 +130,7 @@ class Translator:
         if rate_limited:
             raise RuntimeError('Translation service is still rate-limiting requests after retries. Stop now; successful translations are cached. Try again later.')
         self.failed += 1
-        print(f'  FAILED: untranslated unit (total failures: {self.failed})\\n', flush=True)
+        print(f'  FAILED: untranslated unit (total failures: {self.failed})\n', flush=True)
         return None
 
     def close(self):
@@ -242,14 +243,14 @@ def main():
     parser.add_argument('--cache', type=Path, default=Path('.lingaris-cache.sqlite3'))
     parser.add_argument('--retries', type=int, default=3)
     parser.add_argument('--retry-delay', type=float, default=1)
-    parser.add_argument('--request-interval', type=float, default=1.5, help='Minimum seconds between translation requests (default: 1.5)')
+    parser.add_argument('--request-interval', type=float, default=None, help='Minimum seconds between requests (default: 0 Argos, 1.5 Google)')
     parser.add_argument('--rate-limit-cooldown', type=float, default=30, help='Initial pause after rate limiting; doubles per retry (default: 30)')
     args = parser.parse_args()
     if args.test_translation is None and (args.epub is None or not args.epub.is_file()):
         parser.error('Input EPUB not found')
     if args.source == args.target:
         parser.error('Source and target must differ')
-    if args.retries < 1 or args.retry_delay < 0 or args.request_interval < 0 or args.rate_limit_cooldown < 0:
+    if args.retries < 1 or args.retry_delay < 0 or (args.request_interval is not None and args.request_interval < 0) or args.rate_limit_cooldown < 0:
         parser.error('Retries must be >= 1 and retry delay must be >= 0')
     output = (args.output or args.epub.with_name(f'{args.epub.stem}_{args.source}_{args.target}.epub')) if args.epub else None
     translator = Translator(args.source, args.target, args.cache, args.retries, args.retry_delay,
@@ -260,11 +261,11 @@ def main():
             if args.test_translation is not None:
                 result = translator.translate(args.test_translation)
                 if result is None:
-                    parser.exit(1, 'Test translation failed.\\n')
+                    parser.exit(1, 'Test translation failed.\n')
                 return
             convert(args.epub, output, translator, args.original_first)
         except RuntimeError as exc:
-            parser.exit(1, f'\\nStopped: {exc}\\nTranslations saved: {translator.new} new, {translator.hits} cached.\\n')
+            parser.exit(1, f'\\nStopped: {exc}\\nTranslations saved: {translator.new} new, {translator.hits} cached.\n')
         print(f'Created {output}: {translator.new} new, {translator.hits} cached, {translator.failed} failed')
     finally:
         translator.close()
