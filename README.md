@@ -46,7 +46,29 @@ Change language order to show the original first:
 python lingaris.py book.epub --original-first
 ```
 
-To slow down requests, or increase rate-limit cooldowns:\n\n```bash\npython lingaris.py book.epub --request-interval 3 --rate-limit-cooldown 60\n```\n\nDefaults are 1.5 seconds between requests and a 30/60-second cooldown for rate-limit retries. The console displays each original sentence and translation (including cache hits) with running counters. After persistent rate limiting, Lingaris stops rather than creating an apparently finished but largely untranslated EPUB. Successful sentences are cached, so restarting does not translate them again. Throttling does not guarantee Google will accept every request.\n\nSee `python lingaris.py --help` for settings.
+To slow down requests, or increase rate-limit cooldowns:\n\n```bash\npython lingaris.py book.epub --request-interval 3 --rate-limit-cooldown 60\n```\n\nDefaults are 1.5 seconds between requests and a 30/60-second cooldown for rate-limit retries. The console displays each original sentence and translation (including cache hits) with running counters. After persistent rate limiting, Lingaris stops rather than creating an apparently finished but largely untranslated EPUB. Successful sentences are cached, so restarting does not translate them again. Throttling does not guarantee Google will accept every request.\n\n### Try offline translation with Argos
+
+Install the optional package once:
+
+```bash
+pip install argostranslate
+```
+
+Install the English-to-Spanish language model and translate one test sentence (internet is needed for this one-time model download):
+
+```bash
+python lingaris.py --engine argos --source en --target es --install-argos-model --test-translation "The desert was very quiet."
+```
+
+If the translation looks good, convert a book **offline**:
+
+```bash
+python lingaris.py "My Book.epub" --engine argos
+```
+
+Google remains the default engine. Google and Argos cache entries are kept separate so they can be compared without mixing translations. Model packages vary in quality and direct language-pair availability. Download models only from trusted package indexes.
+
+See `python lingaris.py --help` for settings.
 
 ## Limitations (initial release)
 
