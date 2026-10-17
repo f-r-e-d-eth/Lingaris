@@ -67,7 +67,11 @@ class Translator:
         row = self.db.execute('SELECT translated FROM translations WHERE source=? AND target=? AND original=?', (self.source, self.target, text)).fetchone()
         if row:
             self.hits += 1
+            print(f'[{self.new} new / {self.hits} cached] {self.source.upper()}: {text}', flush=True)
+            print(f'  {self.target.upper()} (cached): {row[0]}\\n', flush=True)
             return row[0]
+        print(f'[{self.new} new / {self.hits} cached] {self.source.upper()}: {text}', flush=True)
+        rate_limited = False
         for attempt in range(self.retries):
             if self.last_request is not None:
                 wait = self.interval - (time.monotonic() - self.last_request)
@@ -81,15 +85,20 @@ class Translator:
                 with self.db:
                     self.db.execute('INSERT OR REPLACE INTO translations VALUES (?,?,?,?)', (self.source, self.target, text, result))
                 self.new += 1
+                print(f'  {self.target.upper()}: {result}\\n', flush=True)
                 return result
             except Exception as e:
-                print(f'Translation attempt {attempt+1}/{self.retries} failed: {e}')
+                print(f'Translation attempt {attempt+1}/{self.retries} failed: {e}', flush=True)
+                limited = any(word in str(e).lower() for word in ('too many requests', '429', 'rate limit'))
+                rate_limited = rate_limited or limited
                 if attempt + 1 < self.retries:
-                    limited = any(word in str(e).lower() for word in ('too many requests', '429', 'rate limit'))
                     wait = self.cooldown * (2 ** attempt) if limited else self.delay
                     print(f'Waiting {wait:g}s before retry', flush=True)
                     time.sleep(wait)
+        if rate_limited:
+            raise RuntimeError('Translation service is still rate-limiting requests after retries. Stop now; successful translations are cached. Try again later.')
         self.failed += 1
+        print(f'  FAILED: untranslated unit (total failures: {self.failed})\\n', flush=True)
         return None
 
     def close(self):
@@ -212,7 +221,10 @@ def main():
     translator = Translator(args.source, args.target, args.cache, args.retries, args.retry_delay,
                             args.request_interval, args.rate_limit_cooldown)
     try:
-        convert(args.epub, output, translator, args.original_first)
+        try:
+            convert(args.epub, output, translator, args.original_first)
+        except RuntimeError as exc:
+            parser.exit(1, f'\\nStopped: {exc}\\nTranslations saved: {translator.new} new, {translator.hits} cached.\\n')
         print(f'Created {output}: {translator.new} new, {translator.hits} cached, {translator.failed} failed')
     finally:
         translator.close()
