@@ -52,10 +52,41 @@ def split_text(text):
     return result
 
 
+def prepare_argos(source, target, install=False):
+    """Load a locally installed Argos model; optionally download it once."""
+    try:
+        import argostranslate.package as package
+        import argostranslate.translate as translate
+    except ImportError as exc:
+        raise RuntimeError("Argos is not installed. Run: pip install argostranslate") from exc
+
+    def find_model():
+        packages = package.get_installed_packages()
+        return any(p.from_code == source and p.to_code == target for p in packages)
+
+    if not find_model():
+        if not install:
+            raise RuntimeError(
+                f"No Argos model for {source}->{target}. "
+                f"Run with --engine argos --install-argos-model --test-translation 'Hello world.'"
+            )
+        print(f"Downloading Argos {source}->{target} model (one-time setup)...", flush=True)
+        package.update_package_index()
+        available = next((p for p in package.get_available_packages()
+                          if p.from_code == source and p.to_code == target), None)
+        if available is None:
+            raise RuntimeError(f"No direct Argos package available for {source}->{target}")
+        package.install_from_path(available.download())
+    return translate.get_translation_from_codes(source, target)
+
+
 class Translator:
-    def __init__(self, source, target, cache, retries=3, delay=1, interval=1.5, cooldown=30):
+    def __init__(self, source, target, cache, retries=3, delay=1, interval=1.5, cooldown=30, engine='google', install_argos_model=False):
         self.source, self.target = source, target
-        self.client = GoogleTranslator(source=source, target=target)
+        self.engine = engine
+        self.cache_source = f'{engine}:{source}'
+        self.client = (GoogleTranslator(source=source, target=target) if engine == 'google'
+                       else prepare_argos(source, target, install_argos_model))
         self.db = sqlite3.connect(cache)
         self.db.execute('CREATE TABLE IF NOT EXISTS translations (source TEXT, target TEXT, original TEXT, translated TEXT, PRIMARY KEY(source,target,original))')
         self.retries, self.delay = retries, delay
@@ -64,7 +95,7 @@ class Translator:
         self.new, self.hits, self.failed = 0, 0, 0
 
     def translate(self, text):
-        row = self.db.execute('SELECT translated FROM translations WHERE source=? AND target=? AND original=?', (self.source, self.target, text)).fetchone()
+        row = self.db.execute('SELECT translated FROM translations WHERE source=? AND target=? AND original=?', (self.cache_source, self.target, text)).fetchone()
         if row:
             self.hits += 1
             print(f'[{self.new} new / {self.hits} cached] {self.source.upper()}: {text}', flush=True)
@@ -83,7 +114,7 @@ class Translator:
                 if not result:
                     raise ValueError('Empty translation')
                 with self.db:
-                    self.db.execute('INSERT OR REPLACE INTO translations VALUES (?,?,?,?)', (self.source, self.target, text, result))
+                    self.db.execute('INSERT OR REPLACE INTO translations VALUES (?,?,?,?)', (self.cache_source, self.target, text, result))
                 self.new += 1
                 print(f'  {self.target.upper()}: {result}\\n', flush=True)
                 return result
@@ -200,7 +231,10 @@ def convert(source, output, translator, original_first=False):
 
 def main():
     parser = argparse.ArgumentParser(description='Translate an EPUB to bilingual reading units')
-    parser.add_argument('epub', type=Path)
+    parser.add_argument('epub', type=Path, nargs='?', help='EPUB to convert')
+    parser.add_argument('--engine', choices=['google', 'argos'], default='google')
+    parser.add_argument('--install-argos-model', action='store_true', help='Download the selected Argos language model once')
+    parser.add_argument('--test-translation', metavar='TEXT', help='Translate only this text and exit')
     parser.add_argument('-o', '--output', type=Path)
     parser.add_argument('--source', default='en')
     parser.add_argument('--target', default='es')
@@ -211,17 +245,23 @@ def main():
     parser.add_argument('--request-interval', type=float, default=1.5, help='Minimum seconds between translation requests (default: 1.5)')
     parser.add_argument('--rate-limit-cooldown', type=float, default=30, help='Initial pause after rate limiting; doubles per retry (default: 30)')
     args = parser.parse_args()
-    if not args.epub.is_file():
+    if args.test_translation is None and (args.epub is None or not args.epub.is_file()):
         parser.error('Input EPUB not found')
     if args.source == args.target:
         parser.error('Source and target must differ')
     if args.retries < 1 or args.retry_delay < 0 or args.request_interval < 0 or args.rate_limit_cooldown < 0:
         parser.error('Retries must be >= 1 and retry delay must be >= 0')
-    output = args.output or args.epub.with_name(f'{args.epub.stem}_{args.source}_{args.target}.epub')
+    output = (args.output or args.epub.with_name(f'{args.epub.stem}_{args.source}_{args.target}.epub')) if args.epub else None
     translator = Translator(args.source, args.target, args.cache, args.retries, args.retry_delay,
-                            args.request_interval, args.rate_limit_cooldown)
+                            args.request_interval, args.rate_limit_cooldown,
+                            args.engine, args.install_argos_model)
     try:
         try:
+            if args.test_translation is not None:
+                result = translator.translate(args.test_translation)
+                if result is None:
+                    parser.exit(1, 'Test translation failed.\\n')
+                return
             convert(args.epub, output, translator, args.original_first)
         except RuntimeError as exc:
             parser.exit(1, f'\\nStopped: {exc}\\nTranslations saved: {translator.new} new, {translator.hits} cached.\\n')
