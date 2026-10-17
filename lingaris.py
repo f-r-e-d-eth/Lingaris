@@ -53,12 +53,14 @@ def split_text(text):
 
 
 class Translator:
-    def __init__(self, source, target, cache, retries=3, delay=1):
+    def __init__(self, source, target, cache, retries=3, delay=1, interval=1.5, cooldown=30):
         self.source, self.target = source, target
         self.client = GoogleTranslator(source=source, target=target)
         self.db = sqlite3.connect(cache)
         self.db.execute('CREATE TABLE IF NOT EXISTS translations (source TEXT, target TEXT, original TEXT, translated TEXT, PRIMARY KEY(source,target,original))')
         self.retries, self.delay = retries, delay
+        self.interval, self.cooldown = interval, cooldown
+        self.last_request = None
         self.new, self.hits, self.failed = 0, 0, 0
 
     def translate(self, text):
@@ -67,6 +69,11 @@ class Translator:
             self.hits += 1
             return row[0]
         for attempt in range(self.retries):
+            if self.last_request is not None:
+                wait = self.interval - (time.monotonic() - self.last_request)
+                if wait > 0:
+                    time.sleep(wait)
+            self.last_request = time.monotonic()
             try:
                 result = self.client.translate(text)
                 if not result:
@@ -78,7 +85,10 @@ class Translator:
             except Exception as e:
                 print(f'Translation attempt {attempt+1}/{self.retries} failed: {e}')
                 if attempt + 1 < self.retries:
-                    time.sleep(self.delay)
+                    limited = any(word in str(e).lower() for word in ('too many requests', '429', 'rate limit'))
+                    wait = self.cooldown * (2 ** attempt) if limited else self.delay
+                    print(f'Waiting {wait:g}s before retry', flush=True)
+                    time.sleep(wait)
         self.failed += 1
         return None
 
@@ -189,15 +199,18 @@ def main():
     parser.add_argument('--cache', type=Path, default=Path('.lingaris-cache.sqlite3'))
     parser.add_argument('--retries', type=int, default=3)
     parser.add_argument('--retry-delay', type=float, default=1)
+    parser.add_argument('--request-interval', type=float, default=1.5, help='Minimum seconds between translation requests (default: 1.5)')
+    parser.add_argument('--rate-limit-cooldown', type=float, default=30, help='Initial pause after rate limiting; doubles per retry (default: 30)')
     args = parser.parse_args()
     if not args.epub.is_file():
         parser.error('Input EPUB not found')
     if args.source == args.target:
         parser.error('Source and target must differ')
-    if args.retries < 1 or args.retry_delay < 0:
+    if args.retries < 1 or args.retry_delay < 0 or args.request_interval < 0 or args.rate_limit_cooldown < 0:
         parser.error('Retries must be >= 1 and retry delay must be >= 0')
     output = args.output or args.epub.with_name(f'{args.epub.stem}_{args.source}_{args.target}.epub')
-    translator = Translator(args.source, args.target, args.cache, args.retries, args.retry_delay)
+    translator = Translator(args.source, args.target, args.cache, args.retries, args.retry_delay,
+                            args.request_interval, args.rate_limit_cooldown)
     try:
         convert(args.epub, output, translator, args.original_first)
         print(f'Created {output}: {translator.new} new, {translator.hits} cached, {translator.failed} failed')
