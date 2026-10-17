@@ -6,6 +6,21 @@ Turn an EPUB into a bilingual language-learning EPUB: translated text first, ori
 
 **Defaults:** English original → Spanish translation. Other language pairs are configurable.
 
+## Example output
+
+Lingaris displays the translated sentence first, followed by the original sentence in smaller, darker-grey text:
+
+> **ES:** El desierto estaba muy tranquilo.
+>
+> <sub>**EN:** The desert was very quiet.</sub>
+>
+> **ES:** Nadie sabía qué pasaría después.
+>
+> <sub>**EN:** Nobody knew what would happen next.</sub>
+
+In the generated EPUB, the two languages appear together as readable sentence pairs, while chapters and illustrations are retained.
+
+
 ## Features
 
 - EPUB input and EPUB output, retaining embedded pictures, chapter files, stylesheets, and navigation
